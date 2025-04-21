@@ -54,8 +54,8 @@ func TextToSpeech(text, outputPath string, config TTSConfig) error {
 		return fmt.Errorf("创建输出目录失败: %v", err)
 	}
 
-	// 生成输出文件名
-	maxLen := 20
+	// 生成输出文件名 ‌在Windows系统中，文件名的最大长度为255个字符‌‌,使用128大多数情况下足够
+	maxLen := 128
 	if len(text) < maxLen {
 		maxLen = len(text)
 	}
@@ -114,16 +114,39 @@ func TextToSpeech(text, outputPath string, config TTSConfig) error {
 }
 
 // BatchTextToSpeech 批量将文本转换为语音
-func BatchTextToSpeech(texts []string, outputPath string, config TTSConfig) error {
+func BatchTextToSpeech(texts []string, outputPath string, config TTSConfig, progressCallback ...ProgressCallback) error {
     total := len(texts)
+	retryCount := 10 // 重试次数
+
     for i, text := range texts {
         if text == "" {
             continue // 跳过空文本
         }
         
-        if err := TextToSpeech(text, outputPath, config); err != nil {
-            return fmt.Errorf("第 %d/%d 个文本转换失败（文本内容：%s）：%v", i+1, total, text, err)
+        // 计算进度百分比
+        percentage := float64(i) / float64(total) * 100
+        
+        // 如果提供了回调函数，则调用它
+        if len(progressCallback) > 0 && progressCallback[0] != nil {
+            progressCallback[0](i, total, percentage)
         }
+        
+		for j := 0; j < retryCount; j++ {
+            if err := TextToSpeech(text, outputPath, config); err != nil {
+                if (j < retryCount - 1) {
+					return fmt.Errorf("第 %d/%d 个文本转换失败（文本内容：%s）：%v", i+1, total, text, err)	
+				}
+            } else {
+				break // 转换成功，跳出重试循环
+			}
+		}
+
     }
+    
+    // 完成时调用回调函数，进度为100%
+    if len(progressCallback) > 0 && progressCallback[0] != nil {
+        progressCallback[0](total, total, 100.0)
+    }
+    
     return nil
 }

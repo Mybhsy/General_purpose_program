@@ -33,16 +33,13 @@ func showAboutDialog() {
 	version := widget.NewLabel("版本: 1.0.0")
 
 	// 创建作者信息
-	author := widget.NewLabel("作者: 张三")
+	author := widget.NewLabel("作者: Mybhsy")
 
-	// 创建邮箱信息
-	email := widget.NewLabel("邮箱: zhangsan@example.com")
-
-	// 创建版权信息
-	copyright := widget.NewLabel("版权: © 2024 保留所有权利")
+	// 创建git信息
+	email := widget.NewLabel("github: https://github.com/Mybhsy/General_purpose_program")
 
 	// 创建描述信息
-	description := widget.NewLabel("这是一个实用的工具软件，集成了以下功能：\n\n1. 文件批量重命名：\n   - 支持通过Excel表格配置新旧文件名，轻松完成大量文件的重命名操作\n   - 适用于批量整理照片、文档、音视频等各类文件\n   - 支持预览重命名结果，避免误操作\n   - 操作简单，只需准备Excel文件和选择目标文件夹即可完成\n\n2. 文字转语音：\n   - 基于微软Edge TTS引擎，提供专业级语音合成服务\n   - 支持中文、英文、日文等多种语言，可选择不同性别和风格的发音人\n   - 语速调节范围-50%至+50%，满足不同场景需求\n   - 音量可调节，确保输出音频清晰舒适\n   - 支持Excel表格批量导入文本，自动转换并保存为MP3格式\n   - 适用于配音、教学、有声书制作等多种应用场景")
+	description := widget.NewLabel("这是一个实用的工具软件，集成了以下功能：\n\n1. 文件批量重命名：\n   - 支持通过Excel表格配置新旧文件名，轻松完成大量文件的重命名操作\n   - 适用于批量整理照片、文档、音视频等各类文件\n   - 操作简单，只需准备Excel文件和选择目标文件夹即可完成\n\n2. 文字转语音：\n   - 基于微软Edge TTS引擎，提供专业级语音合成服务\n   - 支持中文、英文、日文等多种语言，可选择不同性别和风格的发音人\n   - 语速调节范围-100%至+100%，满足不同场景需求\n   - 音量可调节，确保输出音频清晰舒适\n   - 支持Excel表格批量导入文本，自动转换并保存为MP3格式\n   - 适用于配音、教学、有声书制作等多种应用场景")
 	description.Wrapping = fyne.TextWrapWord
 
 	// 创建可滚动的内容区域
@@ -50,7 +47,6 @@ func showAboutDialog() {
 		version,
 		author,
 		email,
-		copyright,
 		description,
 	)
 
@@ -154,7 +150,11 @@ func createRenameTab() fyne.CanvasObject {
 			}
 
 			statusLabel.SetText("正在重命名文件...")
-			if err := utils.RenameFiles(folderPath, data); err != nil {
+			if err := utils.RenameFiles(folderPath, data, func(current, total int, percentage float64) {
+				// 在UI线程中更新进度
+				window.Canvas().Refresh(statusLabel)
+				statusLabel.SetText(fmt.Sprintf("正在重命名语音...%.0f%%(%d/%d)", percentage, current, total))
+			}); err != nil {
 				dialog.ShowError(err, window)
 				statusLabel.SetText("重命名失败")
 				return
@@ -253,16 +253,22 @@ func createTTSTab() fyne.CanvasObject {
 	voiceSelect.SetSelected(voiceMap["zh-CN-XiaoxiaoNeural"]) // 设置默认选项为小娜的显示名称
 
 	// 语速调节
-	rateSlider := widget.NewSlider(-50, 50)
+	rateLabel := widget.NewLabel("+0%")
+	rateSlider := widget.NewSlider(-100, 100)
 	rateSlider.OnChanged = func(value float64) {
-		config.Rate = fmt.Sprintf("%+.0f%%", value)
+		percentage := fmt.Sprintf("%+.0f%%", value)
+		config.Rate = percentage
+		rateLabel.SetText(percentage)
 	}
 	rateSlider.SetValue(0)
 
 	// 音量调节
-	volumeSlider := widget.NewSlider(-50, 50)
+	volumeLabel := widget.NewLabel("+0%")
+	volumeSlider := widget.NewSlider(-100, 100)
 	volumeSlider.OnChanged = func(value float64) {
-		config.Volume = fmt.Sprintf("%+.0f%%", value)
+		percentage := fmt.Sprintf("%+.0f%%", value)
+		config.Volume = percentage
+		volumeLabel.SetText(percentage)
 	}
 	volumeSlider.SetValue(0)
 
@@ -282,8 +288,12 @@ func createTTSTab() fyne.CanvasObject {
 				return
 			}
 
-			statusLabel.SetText("正在转换语音...")
-			if err := utils.BatchTextToSpeech(texts, outputPath, config); err != nil {
+			statusLabel.SetText("正在转换语音...0%")
+			if err := utils.BatchTextToSpeech(texts, outputPath, config, func(current, total int, percentage float64) {
+				// 在UI线程中更新进度
+				window.Canvas().Refresh(statusLabel)
+				statusLabel.SetText(fmt.Sprintf("正在转换语音...%.0f%%(%d/%d)", percentage, current, total))
+			}); err != nil {
 				dialog.ShowError(err, window)
 				statusLabel.SetText(fmt.Sprintf("转换失败: %v", err))
 				return
@@ -302,9 +312,9 @@ func createTTSTab() fyne.CanvasObject {
 			widget.NewLabel("语音选择"),
 			voiceSelect,
 			widget.NewLabel("语速调节"),
-			rateSlider,
+			container.NewBorder(nil, nil, nil, rateLabel, rateSlider),
 			widget.NewLabel("音量调节"),
-			volumeSlider,
+			container.NewBorder(nil, nil, nil, volumeLabel, volumeSlider),
 		),
 		startConvertBtn,
 		statusLabel,
