@@ -45,23 +45,48 @@ func ReadExcelForRename(filePath string) ([]ExcelData, error) {
 	return data, nil
 }
 
-// RenameFiles batch renames files
-func RenameFiles(folderPath string, renameData []ExcelData) error {
-	for _, data := range renameData {
+// ProgressCallback 进度回调函数类型
+type ProgressCallback func(current, total int, percentage float64)
+
+// RenameFiles batch renames files and returns a list of failures
+func RenameFiles(folderPath string, renameData []ExcelData, progressCallback ...ProgressCallback) error {
+	var failures []string
+	total := len(renameData)
+
+	for i, data := range renameData {
 		oldPath := filepath.Join(folderPath, data.OldName)
 		newPath := filepath.Join(folderPath, data.NewName)
 
+		// 计算进度百分比
+        percentage := float64(i) / float64(total) * 100
+		// 如果提供了回调函数，则调用它
+        if len(progressCallback) > 0 && progressCallback[0] != nil {
+            progressCallback[0](i, total, percentage)
+        }
+
 		// Check if source file exists
 		if _, err := os.Stat(oldPath); os.IsNotExist(err) {
-			return fmt.Errorf("文件不存在: %s", oldPath)
+			failures = append(failures, fmt.Sprintf("文件不存在: %s", oldPath))
+			continue
 		}
 
 		// Execute rename
 		if err := os.Rename(oldPath, newPath); err != nil {
-			return fmt.Errorf("重命名失败 %s -> %s: %v", oldPath, newPath, err)
+			failures = append(failures, fmt.Sprintf("重命名失败 %s -> %s: %v", oldPath, newPath, err))
+			continue
 		}
+		
 	}
 
+	// 完成时调用回调函数，进度为100%
+	if len(progressCallback) > 0 && progressCallback[0] != nil {
+		progressCallback[0](total, total, 100.0)
+	}
+
+	// Return error with all failures if any
+	if len(failures) > 0 {
+		return fmt.Errorf("重命名过程中有 %d 个错误:\n%s", len(failures), strings.Join(failures, "\n"))
+	} 
 	return nil
 }
 
